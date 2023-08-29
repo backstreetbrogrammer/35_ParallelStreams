@@ -57,25 +57,23 @@ public class ProbablePrimeBenchmarking {
     }
 
     @Benchmark
+    public List<BigInteger> generate_N_primes() {
+        return IntStream.range(0, N)
+                        .mapToObj(i -> probablePrime())
+                        .collect(toList());
+    }
+
+    @Benchmark
+    public List<BigInteger> generate_N_primes_limit() {
+        return Stream.generate(() -> probablePrime())
+                     .limit(N)
+                     .collect(toList());
+    }
+
+    @Benchmark
     public List<BigInteger> generate_N_primes_parallel() {
         return IntStream.range(0, N)
                         .parallel()
-                        .mapToObj(i -> probablePrime())
-                        .collect(toList());
-    }
-
-    @Benchmark
-    public List<BigInteger> generate_N_primes_parallel_unordered() {
-        return IntStream.range(0, N)
-                        .unordered()
-                        .parallel()
-                        .mapToObj(i -> probablePrime())
-                        .collect(toList());
-    }
-
-    @Benchmark
-    public List<BigInteger> generate_N_primes() {
-        return IntStream.range(0, N)
                         .mapToObj(i -> probablePrime())
                         .collect(toList());
     }
@@ -89,10 +87,12 @@ public class ProbablePrimeBenchmarking {
     }
 
     @Benchmark
-    public List<BigInteger> generate_N_primes_limit() {
-        return Stream.generate(() -> probablePrime())
-                     .limit(N)
-                     .collect(toList());
+    public List<BigInteger> generate_N_primes_parallel_unordered() {
+        return IntStream.range(0, N)
+                        .unordered()
+                        .parallel()
+                        .mapToObj(i -> probablePrime())
+                        .collect(toList());
     }
 
     public static void main(final String[] args) throws RunnerException {

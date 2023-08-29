@@ -328,25 +328,23 @@ public class ProbablePrimeBenchmarking {
     }
 
     @Benchmark
+    public List<BigInteger> generate_N_primes() {
+        return IntStream.range(0, N)
+                        .mapToObj(i -> probablePrime())
+                        .collect(toList());
+    }
+
+    @Benchmark
+    public List<BigInteger> generate_N_primes_limit() {
+        return Stream.generate(() -> probablePrime())
+                     .limit(N)
+                     .collect(toList());
+    }
+
+    @Benchmark
     public List<BigInteger> generate_N_primes_parallel() {
         return IntStream.range(0, N)
                         .parallel()
-                        .mapToObj(i -> probablePrime())
-                        .collect(toList());
-    }
-
-    @Benchmark
-    public List<BigInteger> generate_N_primes_parallel_unordered() {
-        return IntStream.range(0, N)
-                        .unordered()
-                        .parallel()
-                        .mapToObj(i -> probablePrime())
-                        .collect(toList());
-    }
-
-    @Benchmark
-    public List<BigInteger> generate_N_primes() {
-        return IntStream.range(0, N)
                         .mapToObj(i -> probablePrime())
                         .collect(toList());
     }
@@ -360,10 +358,12 @@ public class ProbablePrimeBenchmarking {
     }
 
     @Benchmark
-    public List<BigInteger> generate_N_primes_limit() {
-        return Stream.generate(() -> probablePrime())
-                     .limit(N)
-                     .collect(toList());
+    public List<BigInteger> generate_N_primes_parallel_unordered() {
+        return IntStream.range(0, N)
+                        .unordered()
+                        .parallel()
+                        .mapToObj(i -> probablePrime())
+                        .collect(toList());
     }
 
     public static void main(final String[] args) throws RunnerException {
@@ -384,7 +384,41 @@ To run the benchmark test:
 
 **Output**
 
+```
+Benchmark                                                       (BIT_LENGTH)  (N)  Mode  Cnt   Score   Error  Units
+ProbablePrimeBenchmarking.sum_of_N_Primes                                 64   10  avgt   15   2.674 ± 0.217  ms/op
+ProbablePrimeBenchmarking.sum_of_N_Primes                                 64  100  avgt   15  29.664 ± 8.653  ms/op
+ProbablePrimeBenchmarking.sum_of_N_Primes                                128   10  avgt   15   7.581 ± 0.406  ms/op
+ProbablePrimeBenchmarking.sum_of_N_Primes                                128  100  avgt   15  66.992 ± 6.050  ms/op
+ProbablePrimeBenchmarking.sum_of_N_Primes_no_resize                       64   10  avgt   15   2.402 ± 0.216  ms/op
+ProbablePrimeBenchmarking.sum_of_N_Primes_no_resize                       64  100  avgt   15  27.921 ± 5.307  ms/op
+ProbablePrimeBenchmarking.sum_of_N_Primes_no_resize                      128   10  avgt   15   7.382 ± 0.150  ms/op
+ProbablePrimeBenchmarking.sum_of_N_Primes_no_resize                      128  100  avgt   15  75.847 ± 5.966  ms/op
 
+ProbablePrimeBenchmarking.generate_N_primes                               64   10  avgt   15   2.249 ± 0.072  ms/op
+ProbablePrimeBenchmarking.generate_N_primes                               64  100  avgt   15  22.502 ± 1.242  ms/op
+ProbablePrimeBenchmarking.generate_N_primes                              128   10  avgt   15   7.740 ± 1.235  ms/op
+ProbablePrimeBenchmarking.generate_N_primes                              128  100  avgt   15  71.972 ± 5.984  ms/op
+ProbablePrimeBenchmarking.generate_N_primes_limit                         64   10  avgt   15   2.417 ± 0.270  ms/op
+ProbablePrimeBenchmarking.generate_N_primes_limit                         64  100  avgt   15  24.296 ± 3.817  ms/op
+ProbablePrimeBenchmarking.generate_N_primes_limit                        128   10  avgt   15   6.534 ± 0.337  ms/op
+ProbablePrimeBenchmarking.generate_N_primes_limit                        128  100  avgt   15  78.284 ± 2.517  ms/op
+
+ProbablePrimeBenchmarking.generate_N_primes_parallel                      64   10  avgt   15   1.371 ± 0.018  ms/op
+ProbablePrimeBenchmarking.generate_N_primes_parallel                      64  100  avgt   15  12.679 ± 1.257  ms/op
+ProbablePrimeBenchmarking.generate_N_primes_parallel                     128   10  avgt   15   3.555 ± 0.077  ms/op
+ProbablePrimeBenchmarking.generate_N_primes_parallel                     128  100  avgt   15  31.999 ± 0.480  ms/op
+ProbablePrimeBenchmarking.generate_N_primes_parallel_limit                64   10  avgt   15   1.724 ± 0.032  ms/op
+ProbablePrimeBenchmarking.generate_N_primes_parallel_limit                64  100  avgt   15  16.722 ± 0.301  ms/op
+ProbablePrimeBenchmarking.generate_N_primes_parallel_limit               128   10  avgt   15   4.679 ± 0.495  ms/op
+ProbablePrimeBenchmarking.generate_N_primes_parallel_limit               128  100  avgt   15  54.409 ± 9.498  ms/op
+ProbablePrimeBenchmarking.generate_N_primes_parallel_unordered            64   10  avgt   15   1.601 ± 0.171  ms/op
+ProbablePrimeBenchmarking.generate_N_primes_parallel_unordered            64  100  avgt   15  15.237 ± 1.560  ms/op
+ProbablePrimeBenchmarking.generate_N_primes_parallel_unordered           128   10  avgt   15   3.884 ± 0.574  ms/op
+ProbablePrimeBenchmarking.generate_N_primes_parallel_unordered           128  100  avgt   15  30.179 ± 0.278  ms/op
+```
+
+As evident from the output, parallel streams performance is much better than sequential streams and for loops.
 
 ---
 
