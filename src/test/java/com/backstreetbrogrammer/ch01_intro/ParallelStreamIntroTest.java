@@ -33,7 +33,7 @@ public class ParallelStreamIntroTest {
     @DisplayName("Test probablePrime() using sequential stream")
     void testProbablePrimeUsingSequentialStream() {
         final Instant start = Instant.now();
-        List<BigInteger> primes =
+        final List<BigInteger> primes =
                 IntStream.range(0, N)
                          .limit(N)
                          .mapToObj(i -> probablePrime(BIT_LENGTH))
@@ -46,7 +46,7 @@ public class ParallelStreamIntroTest {
     @DisplayName("Test probablePrime() using parallel stream")
     void testProbablePrimeUsingParallelStream() {
         final Instant start = Instant.now();
-        List<BigInteger> primes =
+        final List<BigInteger> primes =
                 IntStream.range(0, N)
                          .parallel()
                          .mapToObj(i -> probablePrime(BIT_LENGTH))

@@ -424,6 +424,120 @@ As evident from the output, parallel streams performance is much better than seq
 
 ## Chapter 02. Performance Gains using Parallel Streams
 
+While using parallel streams, there are 2 features which can affect performance:
+
+- Autoboxing
+- Pointer chasing
+
+### Autoboxing
+
+**Boxing** refers to the conversion of a primitive value into an object of the corresponding wrapper class. For example,
+converting `int` to `Integer` class.
+
+**Unboxing** on the other hand refers to converting an object of a wrapper type to its corresponding primitive value.
+For example, conversion of `Integer` to `int`.
+
+Java can box and unbox automatically and this is called **Autoboxing**.
+
+```
+int i = 5;
+Integer j = 3; // auto-boxing
+int k = i + j; // auto-unboxing
+Integer l = i + j; // auto-unboxing then auto-boxing
+Integer m = j + l; // auto-unboxing then auto-boxing
+
+int[] ints = {1, 2, 3}; // array of int
+Integer[] integers = {1, 2, 3}; // array of Integer
+List<Integer> list = List.of(1, 2, 3);
+```
+
+Autoboxing was added to provide support for **Collections framework** and **Generics**. However, it has a **cost**
+associated for all the conversions.
+
+Let's measure the performance using JMH.
+
+```java
+import org.openjdk.jmh.annotations.*;
+import org.openjdk.jmh.runner.Runner;
+import org.openjdk.jmh.runner.RunnerException;
+import org.openjdk.jmh.runner.options.Options;
+import org.openjdk.jmh.runner.options.OptionsBuilder;
+
+import java.util.concurrent.TimeUnit;
+
+@Warmup(iterations = 10, time = 5, timeUnit = TimeUnit.SECONDS)
+@Measurement(iterations = 5, time = 5, timeUnit = TimeUnit.SECONDS)
+@Fork(value = 3)
+@BenchmarkMode(Mode.AverageTime)
+@OutputTimeUnit(TimeUnit.MILLISECONDS)
+@State(Scope.Benchmark)
+public class AutoboxingBenchmarking {
+
+    @Param({"100000"})
+    private int N;
+
+    private int[] arrayOfInts;
+    private Integer[] arrayOfIntegers;
+
+    @Setup
+    public void createArrayOfInts() {
+        arrayOfInts = new int[N];
+        for (int i = 0; i < N; i++) {
+            arrayOfInts[i] = 3 * i;
+        }
+    }
+
+    @Setup
+    public void createArrayOfIntegers() {
+        arrayOfIntegers = new Integer[N];
+        for (int i = 0; i < N; i++) {
+            arrayOfIntegers[i] = 3 * i;
+        }
+    }
+
+    @Benchmark
+    public int calculate_sum_of_ints() {
+        int sum = 0;
+        for (int i = 0; i < arrayOfInts.length; i++) {
+            sum += i * 7;
+        }
+        return sum;
+    }
+
+    @Benchmark
+    public int calculate_sum_of_integers() {
+        Integer sum = 0;
+        for (int i = 0; i < arrayOfIntegers.length; i++) {
+            sum += i * 7;
+        }
+        return sum;
+    }
+
+    public static void main(final String[] args) throws RunnerException {
+        final Options opt = new OptionsBuilder()
+                .include(AutoboxingBenchmarking.class.getName())
+                .build();
+        new Runner(opt).run();
+    }
+
+}
+```
+
+Build and install the project using `mvn clean install`
+
+Run the benchmark test:
+`java -jar target/benchmarks.jar AutoboxingBenchmarking.calculate_sum_of_ints AutoboxingBenchmarking.calculate_sum_of_integers`
+
+**Output:**
+
+```
+Benchmark                                                                  (N)  Mode  Cnt  Score   Error  Units
+ch02_performanceGains.AutoboxingBenchmarking.calculate_sum_of_integers  100000  avgt   15  0.337 ± 0.070  ms/op
+ch02_performanceGains.AutoboxingBenchmarking.calculate_sum_of_ints      100000  avgt   15  0.037 ± 0.001  ms/op
+```
+
+Performance is very poor for wrapper `Integer` sum as compared to primitive `int` sum.
+
 ---
 
 ## Chapter 03. Fork-Join Pool of Parallel Streams
