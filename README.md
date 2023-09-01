@@ -15,7 +15,8 @@ Tools used:
     - [Interview Problem 1 (Point72 Hedge Fund): How to count huge number of transactions in a trading day](https://github.com/backstreetbrogrammer/35_ParallelStreams#interview-problem-1-point72-hedge-fund-how-to-count-huge-number-of-transactions-in-a-trading-day)
     - [Difference in `parallelStream()` and `stream().parallel()`](https://github.com/backstreetbrogrammer/35_ParallelStreams#difference-in-parallelstream-and-streamparallel)
     - [Performance benchmarking using JMH](https://github.com/backstreetbrogrammer/35_ParallelStreams#performance-benchmarking-using-jmh)
-2. Performance Gains using Parallel Streams
+2. [Performance Gains using Parallel Streams](https://github.com/backstreetbrogrammer/35_ParallelStreams#chapter-02-performance-gains-using-parallel-streams)
+    - [Autoboxing](https://github.com/backstreetbrogrammer/35_ParallelStreams#autoboxing)
 3. Fork-Join Pool of Parallel Streams
 4. Parallel Collectors
 5. Good practices using Parallel Streams
@@ -536,7 +537,36 @@ ch02_performanceGains.AutoboxingBenchmarking.calculate_sum_of_integers  100000  
 ch02_performanceGains.AutoboxingBenchmarking.calculate_sum_of_ints      100000  avgt   15  0.037 ± 0.001  ms/op
 ```
 
-Performance is very poor for wrapper `Integer` sum as compared to primitive `int` sum.
+Performance is very poor for wrapper `Integer` sum as compared to primitive `int` sum because of a lot of autoboxing.
+
+### Pointer chasing
+
+As we have seen multicore CPU architecture before where we have different level of caches present: L1, L2 and L3.
+
+![CPUCaches](CPUCaches.PNG)
+
+The memory is organized in cache-lines and data is transferred line by line between the main memory and the CPU caches.
+
+An array is stored in a contiguous zone of the memory.
+
+So, for an array of primitive **ints**, the data can be fetched very efficiently from memory to CPU caches.
+
+However, for an array of wrapper **Integers**, only the **references** to different `Integer` objects (which are spread
+across the heap) are stored.
+
+Thus, to fetch the actual `Integer` objects pointed by these references is not cache-friendly and has got a cost. This
+phenomenon is called **pointer chasing**.
+
+Things are still better in `ArrayList<Integer>` as at-least the references are stored contiguously in memory lines.
+
+![ArrayList](ArrayList.PNG)
+
+In a `LinkedList<Integer>`, even the references are scattered over memory, and we need to trace all the nodes from head
+to tail to fetch it.
+
+![LinkedList](LinkedList.PNG)
+
+
 
 ---
 
