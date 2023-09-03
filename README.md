@@ -17,7 +17,8 @@ Tools used:
     - [Performance benchmarking using JMH](https://github.com/backstreetbrogrammer/35_ParallelStreams#performance-benchmarking-using-jmh)
 2. [Performance Gains using Parallel Streams](https://github.com/backstreetbrogrammer/35_ParallelStreams#chapter-02-performance-gains-using-parallel-streams)
     - [Autoboxing](https://github.com/backstreetbrogrammer/35_ParallelStreams#autoboxing)
-3. Fork-Join Pool of Parallel Streams
+    - [Pointer chasing](https://github.com/backstreetbrogrammer/35_ParallelStreams#pointer-chasing)
+3. [Fork-Join Pool of Parallel Streams](https://github.com/backstreetbrogrammer/35_ParallelStreams#chapter-03-fork-join-pool-of-parallel-streams)
 4. Parallel Collectors
 5. Good practices using Parallel Streams
 
@@ -722,6 +723,134 @@ ArrayList > LinkedList > LinkedList (shuffled) > LinkedList (scattered)
 ---
 
 ## Chapter 03. Fork-Join Pool of Parallel Streams
+
+Parallel streams are built on the Fork-Join Pool framework:
+
+- a task is split in 2 sub-tasks
+- sub-tasks are sent to a common pool of thread: **Fork-Join Pool**
+- the results of each sub-tasks are joined
+- and the global result is computed
+
+![ForkJoin](ForkJoin.PNG)
+
+The common **Fork-Join Pool**:
+
+- is a pool of threads
+- created when the JVM is created
+- this pool is used for **all** the parallel streams running on a single JVM instance
+- the **size** of the pool is **fixed** by the number of **virtual cores**
+
+However, the API allows us to specify the number of threads it will use by passing a JVM parameter:
+
+```
+-D java.util.concurrent.ForkJoinPool.common.parallelism=4
+```
+
+It's important to remember that this is a global setting and that it will affect all parallel streams and any other
+fork-join tasks that use the common pool. Thus, this parameter should not be modified unless we have a very good reason
+for doing so.
+
+### Interview Problem 2 (JP Morgan Chase): Identify the issue in the given code snippet
+
+The fork-join framework is in charge of splitting the source data between worker threads and handling callback on task
+completion.
+
+Code snippet for calculating a sum of integers in parallel:
+
+```java
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+public class ParallelStreamsIssues {
+
+    @Test
+    void testParallelSumOfIntegers() {
+        final List<Integer> listOfNumbers = List.of(1, 2, 3, 4);
+        final int sum = listOfNumbers.parallelStream()
+                                     .reduce(5, Integer::sum);
+        assertEquals(15, sum);
+    }
+}
+```
+
+**Output**
+
+```
+org.opentest4j.AssertionFailedError: 
+Expected :15
+Actual   :30
+<Click to see difference>
+
+	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+	...
+	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:145)
+	at org.junit.jupiter.api.Assertions.assertEquals(Assertions.java:528)
+	at com.backstreetbrogrammer.ch03_forkJoin.ParallelStreamsIssues.testParallelSumOfIntegers(ParallelStreamsIssues.java:16)
+	...
+	...
+```
+
+Sum of first 5 integers 1...5 is `15`.
+
+However, the above test always **fails**!
+
+If we use **sequential** stream, `sum` is always correct as `15`.
+
+But since the `reduce()` operation is handled in **parallel**, the number `5` actually gets added up in **every** worker
+thread:
+
+![ParallelSum](ParallelSum.PNG)
+
+The actual result might differ depending on the number of threads used in the common fork-join pool.
+
+For example, when we run this test case in computer with 4 virtual cores, then 5 is added to each split of data.
+
+```
+[1,2,3,4]
+
+T1 = 5 + 1
+T2 = 5 + 2
+T3 = 5 + 3
+T4 = 5 + 4
+
+Total = 6 + 7 + 8 + 9 = 30
+```
+
+**Solution**
+
+Number `5` should be added outside the parallel stream:
+
+```
+    @Test
+    void testParallelSumOfIntegersCorrect() {
+        final List<Integer> listOfNumbers = List.of(1, 2, 3, 4);
+        final int sum = listOfNumbers.parallelStream()
+                                     .reduce(0, Integer::sum) + 5;
+        assertEquals(15, sum);
+    }
+```
+
+Therefore, we need to be very careful about which operations can be run in parallel.
+
+Besides, the default **common** thread pool, it's also possible to run a parallel stream in a **custom** thread pool.
+
+```
+    @Test
+    void testCustomThreadPool() throws ExecutionException, InterruptedException {
+        final List<Integer> listOfNumbers = List.of(1, 2, 3, 4, 5);
+        final ForkJoinPool customThreadPool = new ForkJoinPool(4);
+        final int sum = customThreadPool
+                .submit(
+                        () -> listOfNumbers.parallelStream()
+                                           .reduce(0, Integer::sum))
+                .get();
+        customThreadPool.shutdown();
+        assertEquals(15, sum);
+    }
+```
 
 ---
 
