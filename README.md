@@ -23,6 +23,9 @@ Tools used:
     - [Performance implications](https://github.com/backstreetbrogrammer/35_ParallelStreams#performance-implications)
         - [Hidden synchronizations](https://github.com/backstreetbrogrammer/35_ParallelStreams#hidden-synchronizations)
         - [Faulty non-associative reductions](https://github.com/backstreetbrogrammer/35_ParallelStreams#faulty-non-associative-reductions)
+    - [Interview Problem 3 (Barclays): Display the threads executing in parallel streams](https://github.com/backstreetbrogrammer/35_ParallelStreams#interview-problem-3-barclays-display-the-threads-executing-in-parallel-streams)
+        - [Follow up 1: Execute a parallel stream in a custom Fork-Join Pool](https://github.com/backstreetbrogrammer/35_ParallelStreams#follow-up-1-execute-a-parallel-stream-in-a-custom-fork-join-pool)
+        - [Follow up 2: Count the number of tasks each thread executed in the custom Fork-Join Pool](https://github.com/backstreetbrogrammer/35_ParallelStreams#follow-up-2-count-the-number-of-tasks-each-thread-executed-in-the-custom-fork-join-pool)
 4. [Parallel Collectors](https://github.com/backstreetbrogrammer/35_ParallelStreams#chapter-04-parallel-collectors)
 5. [Good practices using Parallel Streams](https://github.com/backstreetbrogrammer/35_ParallelStreams#chapter-05-good-practices-using-parallel-streams)
 
