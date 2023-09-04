@@ -19,8 +19,12 @@ Tools used:
     - [Autoboxing](https://github.com/backstreetbrogrammer/35_ParallelStreams#autoboxing)
     - [Pointer chasing](https://github.com/backstreetbrogrammer/35_ParallelStreams#pointer-chasing)
 3. [Fork-Join Pool of Parallel Streams](https://github.com/backstreetbrogrammer/35_ParallelStreams#chapter-03-fork-join-pool-of-parallel-streams)
-4. Parallel Collectors
-5. Good practices using Parallel Streams
+    - [Interview Problem 2 (JP Morgan Chase): Identify the issue in the given code snippet](https://github.com/backstreetbrogrammer/35_ParallelStreams#interview-problem-2-jp-morgan-chase-identify-the-issue-in-the-given-code-snippet)
+    - [Performance implications](https://github.com/backstreetbrogrammer/35_ParallelStreams#performance-implications)
+        - [Hidden synchronizations](https://github.com/backstreetbrogrammer/35_ParallelStreams#hidden-synchronizations)
+        - [Faulty non-associative reductions](https://github.com/backstreetbrogrammer/35_ParallelStreams#faulty-non-associative-reductions)
+4. [Parallel Collectors](https://github.com/backstreetbrogrammer/35_ParallelStreams#chapter-04-parallel-collectors)
+5. [Good practices using Parallel Streams](https://github.com/backstreetbrogrammer/35_ParallelStreams#chapter-05-good-practices-using-parallel-streams)
 
 ---
 
@@ -733,6 +737,29 @@ Parallel streams are built on the Fork-Join Pool framework:
 
 ![ForkJoin](ForkJoin.PNG)
 
+There are 2 kinds of tasks:
+
+- tasks that have been split
+- terminal tasks
+
+Suppose, we compute a **sum** as our task.
+
+```
+A1 is sum of more than 2 integers (say 4 integers).
+A1 has been split into 2 sub-tasks A2 and A3. -> split task (fork)
+Sub-tasks are small enough (only 2 integers to add) -> terminal tasks
+Thus, A2 produced the result as 5 and A3 produced the result as 9.
+Results are sent to A1. 
+A1 combines the result and produced the result as 14 -> A1 is now terminal task (join)
+```
+
+All the above **Fork-Join** steps happen in **parallel**. As soon as the tasks are generated, the computation begins.
+
+The tasks are stored in **waiting queues** -> each thread in the common pool has its **_own_** waiting queue.
+
+A non-active thread can steal tasks from another queue => this is **work stealing**. This helps to utilize all the
+threads and make them busy.
+
 The common **Fork-Join Pool**:
 
 - is a pool of threads
@@ -850,6 +877,428 @@ Besides, the default **common** thread pool, it's also possible to run a paralle
         customThreadPool.shutdown();
         assertEquals(15, sum);
     }
+```
+
+However, please note that using the **common** thread pool is recommended by **Oracle**. We should have a very good
+reason for running parallel streams in **custom** thread pools.
+
+### Performance implications
+
+Parallel processing may be beneficial to fully utilize multiple cores. But we also need to consider the overhead of
+managing multiple threads, memory locality, splitting the source and merging the results.
+
+Let's consider a simple example to sum a list of integers serially and in parallel.
+
+```java
+import org.openjdk.jmh.annotations.*;
+import org.openjdk.jmh.runner.Runner;
+import org.openjdk.jmh.runner.RunnerException;
+import org.openjdk.jmh.runner.options.Options;
+import org.openjdk.jmh.runner.options.OptionsBuilder;
+
+import java.util.List;
+import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
+@Warmup(iterations = 10, time = 1, timeUnit = TimeUnit.SECONDS)
+@Measurement(iterations = 5, time = 1, timeUnit = TimeUnit.SECONDS)
+@Fork(value = 3)
+@BenchmarkMode(Mode.AverageTime)
+@OutputTimeUnit(TimeUnit.MICROSECONDS)
+@State(Scope.Benchmark)
+public class ParallelSumBenchmarking {
+
+    private final Random random = ThreadLocalRandom.current();
+
+    @Param({"10000000"})
+    private int N;
+    private List<Integer> intsN100;
+
+    @Setup
+    public void setup() {
+        intsN100 = IntStream.range(0, N)
+                            .mapToObj(index -> random.nextInt(100))
+                            .collect(Collectors.toList());
+    }
+
+    @Benchmark
+    public double sum_no_parallel() {
+        return intsN100.stream().mapToInt(i -> i).sum();
+    }
+
+    @Benchmark
+    public double sum_parallel() {
+        return intsN100.stream().mapToInt(i -> i).parallel().sum();
+    }
+
+    public static void main(final String[] args) throws RunnerException {
+        final Options opt = new OptionsBuilder()
+                .include(ParallelSumBenchmarking.class.getName())
+                .build();
+        new Runner(opt).run();
+    }
+}
+```
+
+When `N` is very huge = `10_000_000`, **parallel** sum will result in much **better** performance.
+
+```
+Benchmark                                                   (N)  Mode  Cnt      Score     Error  Units
+ch03_forkJoin.ParallelSumBenchmarking.sum_no_parallel  10000000  avgt   15  12897.447 ± 768.043  us/op
+ch03_forkJoin.ParallelSumBenchmarking.sum_parallel     10000000  avgt   15   5613.219 ± 560.596  us/op
+```
+
+However, if we reduce `N` to `10` or `100`, **parallel** sum will have much **worse** performance.
+
+```
+    @Param({"10"})
+    private int N;
+```
+
+```
+Benchmark                                              (N)  Mode  Cnt   Score    Error  Units
+ch03_forkJoin.ParallelSumBenchmarking.sum_no_parallel   10  avgt   15   0.169 ±  0.079  us/op
+ch03_forkJoin.ParallelSumBenchmarking.sum_parallel      10  avgt   15  25.582 ± 27.177  us/op
+```
+
+The reason behind this is that sometimes the overhead of managing threads, sources and results is a more expensive
+operation than doing the actual work.
+
+Things that can go wrong:
+
+- Hidden synchronizations
+- Faulty non-associative reductions
+
+#### Hidden synchronizations
+
+Synchronization means allowing only 1 thread to access a piece of critical code or critical section.
+
+Code snippet:
+
+```
+stream.filter(number -> number % 11 == 0)
+      .findFirst(); // find the FIRST element
+```
+
+How can Fork-Join API track the first element ? By using synchronization across multiple threads in the pool.
+
+However, using `findAny()` will be much easier and have less or no hidden synchronization involved.
+
+Similarly, for `limit()`, there is hidden synchronization involved:
+
+```
+stream.limit(100) // takes the FIRST 100 elements
+      .sum(); 
+```
+
+Benchmarking tests for `limit()` costs:
+
+```java
+import org.openjdk.jmh.annotations.*;
+import org.openjdk.jmh.runner.Runner;
+import org.openjdk.jmh.runner.RunnerException;
+import org.openjdk.jmh.runner.options.Options;
+import org.openjdk.jmh.runner.options.OptionsBuilder;
+
+import java.util.List;
+import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
+@Warmup(iterations = 10, time = 1, timeUnit = TimeUnit.SECONDS)
+@Measurement(iterations = 5, time = 1, timeUnit = TimeUnit.SECONDS)
+@Fork(value = 3)
+@BenchmarkMode(Mode.AverageTime)
+@OutputTimeUnit(TimeUnit.MICROSECONDS)
+@State(Scope.Benchmark)
+public class ParallelSumLimitBenchmarking {
+
+    private final Random random = ThreadLocalRandom.current();
+
+    @Param({"1000000"})
+    private int N;
+    private List<Integer> intsN100;
+    private List<Integer> intsN150;
+
+    @Setup
+    public void setup() {
+        intsN100 = IntStream.range(0, N)
+                            .mapToObj(index -> random.nextInt(100))
+                            .collect(Collectors.toList());
+
+        intsN150 = IntStream.range(0, N + N / 2)
+                            .mapToObj(index -> random.nextInt(100))
+                            .collect(Collectors.toList());
+    }
+
+    @Benchmark
+    public double sum_no_parallel() {
+        return intsN100.stream().mapToInt(i -> i).sum();
+    }
+
+    @Benchmark
+    public double sum_limit_no_parallel() {
+        return intsN150.stream().mapToInt(i -> i).limit(N).sum();
+    }
+
+    @Benchmark
+    public double sum_parallel() {
+        return intsN100.stream().mapToInt(i -> i).parallel().sum();
+    }
+
+    @Benchmark
+    public double sum_limit_parallel() {
+        return intsN150.stream().mapToInt(i -> i).parallel().limit(N).sum();
+    }
+
+    public static void main(final String[] args) throws RunnerException {
+        final Options opt = new OptionsBuilder()
+                .include(ParallelSumLimitBenchmarking.class.getName())
+                .build();
+        new Runner(opt).run();
+    }
+
+}
+```
+
+**Output:**
+
+```
+Benchmark                                                             (N)  Mode  Cnt     Score     Error  Units
+ch03_forkJoin.ParallelSumLimitBenchmarking.sum_no_parallel        1000000  avgt   15   990.050 ± 106.966  us/op
+ch03_forkJoin.ParallelSumLimitBenchmarking.sum_limit_no_parallel  1000000  avgt   15  3163.945 ± 551.432  us/op
+ch03_forkJoin.ParallelSumLimitBenchmarking.sum_parallel           1000000  avgt   15   855.696 ± 455.627  us/op
+ch03_forkJoin.ParallelSumLimitBenchmarking.sum_limit_parallel     1000000  avgt   15  2392.454 ± 940.209  us/op
+```
+
+As per the results, we can see that using `limit()` in **serial** streams or **parallel** streams has got a lot of
+overhead cost because of **hidden synchronization**.
+
+#### Faulty non-associative reductions
+
+If we are using the `reduce()` method to reduce the stream OR to **join** the partial results => then the operation has
+to be **associative**.
+
+In mathematics, an **associative** operation is a calculation that gives the same result regardless of the way the
+numbers are grouped. **Addition** and **multiplication** are both associative, while **subtraction** and **division**
+are not.
+
+For example, addition is associative:
+
+```
+Associative 
+
+2+(2+5) = 9
+(2+2)+5 = 9
+```
+
+While, subtraction is not associative:
+
+```
+Not associative 
+
+4-(2-1) = 3
+(4-2)-1 = 1
+```
+
+Now, let's take the example of `reduce()`:
+
+```
+BinaryOperator<T> reduction = ...;
+
+// if using parallel streams, data can be split in random order 
+// say, first as (a,b) and c 
+T t1 = reduction.apply(a, b);
+T result = reduction.apply(t1, c);
+
+// OR, first as (b,c) and a 
+T t2 = reduction.apply(b, c);
+T result = reduction.apply(t2, a);
+
+// OR, first as (a,c) and b
+T t3 = reduction.apply(a, c);
+T result = reduction.apply(t3, b);
+```
+
+Thus, it all depends on this `BinaryOperator<T> reduction` whether it is associative or not, otherwise, we will get
+wrong results.
+
+For example, if we are using **sum** (`T::sum`), then the result will be correct using parallel streams, irrespective of
+how the data is being split among threads.
+
+Using **identity** with `reduce()` method for sum will be associative:
+
+```
+stream.reduce(0, (a, b) -> a + b));
+```
+
+However, the sum of squares code snippet is **not** associative:
+
+```
+stream.reduce(0, (a, b) -> a*a + b*b));
+```
+
+If we have list of 8 integers = `[1, 1, 1, 1, 1, 1, 1, 1]`
+
+Expected correct result is = `1*1 + 1*1 + 1*1 + 1*1 + 1*1 + 1*1 + 1*1 + 1*1 => 8`
+
+However, if we use parallel stream `reduce()` method as above:
+
+```
+T1 gets first 2 ones = 1*1 + 1*1 => 2
+After that, it gets the third 1 = 2*2 + 1*1 => 5
+After that, it gets the fourth 1 = 5*5 + 1*1 => 26
+...
+```
+
+In another scenario, if all the 8 integers are split uniformly in Fork-Join pool, results will still be wrong.
+
+```
+[1, 1, 1, 1, 1, 1, 1, 1] => split into 2 subtasks [1, 1, 1, 1] and  [1, 1, 1, 1]
+Again, each subtaks [1, 1, 1, 1] are split into 2 subtasks [1, 1] and [1, 1]
+Now sum is calculated as we have reached terminal tasks [1, 1] = 1*1 + 1*1 = 2
+Results of 2 subtasks = [1, 1] and [1, 1] = 2*2 + 2*2 = 8
+Results of 2 subtasks = [1, 1, 1, 1] and  [1, 1, 1, 1] = 8*8 + 8*8 = 128
+```
+
+Associativity unit test:
+
+```
+    @Test
+    void testAssociativityIssues() {
+        final int sum = IntStream.range(0, 10)
+                                 .sum();
+        System.out.printf("sum = %d%n", sum);
+
+        final int sumParallel = IntStream.range(0, 10)
+                                         .parallel()
+                                         .sum();
+        System.out.printf("parallel sum = %d%n", sumParallel);
+
+        final int sumOfSquares = IntStream.range(0, 10)
+                                          .reduce(0, (i1, i2) -> i1 * i1 + i2 * i2);
+        System.out.printf("sum of squares = %d%n", sumOfSquares);
+
+        final int sumOfSquaresParallel = IntStream.range(0, 10)
+                                                  .map(i -> i * i)
+                                                  .parallel()
+                                                  .reduce(0, (i1, i2) -> i1 * i1 + i2 * i2);
+        System.out.printf("parallel sum of squares = %d%n", sumOfSquaresParallel);
+    }
+```
+
+**Output**
+
+```
+sum = 45
+parallel sum = 45
+sum of squares = 492125537
+parallel sum of squares = 1972450717
+```
+
+### Interview Problem 3 (Barclays): Display the threads executing in parallel streams
+
+Write a demo code to display the threads names executing in parallel streams.
+
+**Solution**
+
+As we have learnt that parallel streams use common Fork-Join pool under the hood, we should be able to explain the same.
+
+```
+    @Test
+    @DisplayName("Display thread names in parallel stream")
+    void displayThreadNamesInParallelStream() {
+        final Set<String> threadNames = ConcurrentHashMap.newKeySet();
+
+        final int sum = IntStream.range(0, 1_000_000)
+                                 .map(i -> i * 3)
+                                 .parallel()
+                                 .peek(i -> threadNames.add(Thread.currentThread().getName()))
+                                 .sum();
+
+        threadNames.forEach(System.out::println);
+    }
+```
+
+**Sample Output**
+
+```
+ForkJoinPool.commonPool-worker-7
+main
+ForkJoinPool.commonPool-worker-5
+ForkJoinPool.commonPool-worker-3
+```
+
+#### Follow up 1: Execute a parallel stream in a custom Fork-Join Pool
+
+We can create a new `ForkJoinPool` object with the given number of parallelism and submit the tasks to it.
+
+```
+    @Test
+    @DisplayName("Execute a parallel stream in a custom Fork-Join Pool")
+    void executeParallelStreamInCustomForkJoinPool() throws ExecutionException, InterruptedException {
+        final Set<String> threadNames = ConcurrentHashMap.newKeySet();
+        final ForkJoinPool forkJoinPool = new ForkJoinPool(4);
+        final Callable<Integer> task = () -> IntStream.range(0, 1_000_000)
+                                                      .map(i -> i * 3)
+                                                      .parallel()
+                                                      .peek(i -> threadNames.add(Thread.currentThread().getName()))
+                                                      .sum();
+
+        final ForkJoinTask<Integer> submit = forkJoinPool.submit(task);
+        submit.get(); // blocking
+        
+        threadNames.forEach(System.out::println);
+        forkJoinPool.shutdown();
+    }
+```
+
+**Sample Output**
+
+```
+ForkJoinPool-1-worker-7
+ForkJoinPool-1-worker-1
+ForkJoinPool-1-worker-5
+ForkJoinPool-1-worker-3
+```
+
+#### Follow up 2: Count the number of tasks each thread executed in the custom Fork-Join Pool
+
+This is a tricky question, but it helps to understand the internal details and control of the threads.
+
+```
+    @Test
+    @DisplayName("Count the number of tasks each thread executed in the custom Fork-Join Pool")
+    void countNumberOfTasksExecutedByEachThreadCustomForkJoinPool() throws ExecutionException, InterruptedException {
+        final Map<String, Long> threadMap = new ConcurrentHashMap<>();
+        final ForkJoinPool forkJoinPool = new ForkJoinPool(4);
+        final Callable<Integer> task = () -> IntStream.range(0, 1_000_000)
+                                                      .map(i -> i * 3)
+                                                      .parallel()
+                                                      .peek(i -> threadMap.merge(Thread.currentThread().getName(),
+                                                                                 1L, Long::sum))
+                                                      .sum();
+        final ForkJoinTask<Integer> submit = forkJoinPool.submit(task);
+        submit.get(); // blocking
+
+        threadMap.forEach((threadName, count) -> System.out.printf("Thread name: %s, Count of tasks: %d%n",
+                                                                   threadName, count));
+        forkJoinPool.shutdown();
+    }
+```
+
+**Sample Output**
+
+```
+Thread name: ForkJoinPool-1-worker-7, Count of tasks: 312500
+Thread name: ForkJoinPool-1-worker-1, Count of tasks: 125000
+Thread name: ForkJoinPool-1-worker-5, Count of tasks: 312500
+Thread name: ForkJoinPool-1-worker-3, Count of tasks: 250000
 ```
 
 ---
