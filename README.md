@@ -1326,6 +1326,8 @@ There is a third party library which handles Parallel Streams API very well:
 
 A Stream can be created on many sources of data like arrays, collections, text files, etc.
 
+### Splitting the data source
+
 Splitting the data source **evenly** is a necessary cost to enable parallel execution, but some data sources split
 better than others.
 
@@ -1429,8 +1431,109 @@ Results show that converting a sequential stream into a parallel one brings perf
 
 The reason behind this is that arrays can **split** cheaply and evenly, while `LinkedList` has none of these properties.
 
+**Set and HashMap**
+
 A `Set` is implemented by `HashSet`, backed by a `HashMap`. And as we know that `HashMap` is built on an **array**.
-Thus, `HashSet` and `TreeMap` split better than `LinkedList` but not as well as **arrays**.
+
+Size of the backed array is always a power of 2: 16, 32, 64, etc.
+
+The entry object is stored in this array based on the hashcode of the key and randomly split across the array. For the
+hash collisions, the same bucket can have linked list of entry objects.
+
+Therefore, although splitting a set is easy and reaching the center is inexpensive, still it's impossible to know if
+both the halves contain equal number of entry objects.
+
+Thus, `HashSet` and `HashMap` split better than `LinkedList` but not as well as **arrays**.
+
+**Iterator**
+
+A **stream** can be created on an **iterator** but the number of elements is **unknown**. So parallel stream split will
+be not as performant as `Set`, `Map` or an `array`.
+
+### Merging the results
+
+Every time we split the source for parallel computation, we also need to make sure to combine the results in the end.
+
+Let's run a benchmark on a **sequential** and **parallel** stream, with **sum** and **grouping** as different merging
+operations:
+
+```java
+import org.openjdk.jmh.annotations.*;
+import org.openjdk.jmh.runner.Runner;
+import org.openjdk.jmh.runner.RunnerException;
+import org.openjdk.jmh.runner.options.Options;
+import org.openjdk.jmh.runner.options.OptionsBuilder;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
+@Warmup(iterations = 10, time = 1, timeUnit = TimeUnit.SECONDS)
+@Measurement(iterations = 5, time = 1, timeUnit = TimeUnit.SECONDS)
+@Fork(value = 3)
+@BenchmarkMode(Mode.AverageTime)
+@OutputTimeUnit(TimeUnit.MICROSECONDS)
+@State(Scope.Benchmark)
+public class MergingResultsBenchmarking {
+
+    @Param({"1000000"})
+    private int N;
+
+    private final List<Integer> arrayListOfNumbers = new ArrayList<>();
+
+    @Setup
+    public void setup() {
+        IntStream.rangeClosed(1, N).forEach(arrayListOfNumbers::add);
+    }
+
+    @Benchmark
+    public double sum_arrayList_sequential() {
+        return arrayListOfNumbers.stream().reduce(0, Integer::sum);
+    }
+
+    @Benchmark
+    public double sum_arrayList_parallel() {
+        return arrayListOfNumbers.stream().parallel().reduce(0, Integer::sum);
+    }
+
+    @Benchmark
+    public Set<Integer> collect_arrayList_sequential() {
+        return arrayListOfNumbers.stream().collect(Collectors.toSet());
+    }
+
+    @Benchmark
+    public Set<Integer> collect_arrayList_parallel() {
+        return arrayListOfNumbers.stream().parallel().collect(Collectors.toSet());
+    }
+
+    public static void main(final String[] args) throws RunnerException {
+        final Options opt = new OptionsBuilder()
+                .include(MergingResultsBenchmarking.class.getName())
+                .build();
+        new Runner(opt).run();
+    }
+}
+```
+
+**Output**
+
+```
+Benchmark                                                                       (N)  Mode  Cnt       Score        Error  Units
+ch04_bestPractices.MergingResultsBenchmarking.collect_arrayList_parallel    1000000  avgt   15  365329.118 ± 134080.017  us/op
+ch04_bestPractices.MergingResultsBenchmarking.collect_arrayList_sequential  1000000  avgt   15  158669.485 ±  26974.341  us/op
+ch04_bestPractices.MergingResultsBenchmarking.sum_arrayList_parallel        1000000  avgt   15    4405.790 ±    426.799  us/op
+ch04_bestPractices.MergingResultsBenchmarking.sum_arrayList_sequential      1000000  avgt   15    8443.536 ±    945.115  us/op
+```
+
+Results show that converting a sequential stream into a parallel one brings performance benefits only for the **sum**
+operation.
+
+The merge operation is really cheap for some operations, such as **reduction** and **addition**, but merge operations
+like **grouping** to **sets** or **maps** can be quite expensive.
+
 
 ---
 
