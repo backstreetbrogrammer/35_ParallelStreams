@@ -26,8 +26,8 @@ Tools used:
     - [Interview Problem 3 (Barclays): Display the threads executing in parallel streams](https://github.com/backstreetbrogrammer/35_ParallelStreams#interview-problem-3-barclays-display-the-threads-executing-in-parallel-streams)
         - [Follow up 1: Execute a parallel stream in a custom Fork-Join Pool](https://github.com/backstreetbrogrammer/35_ParallelStreams#follow-up-1-execute-a-parallel-stream-in-a-custom-fork-join-pool)
         - [Follow up 2: Count the number of tasks each thread executed in the custom Fork-Join Pool](https://github.com/backstreetbrogrammer/35_ParallelStreams#follow-up-2-count-the-number-of-tasks-each-thread-executed-in-the-custom-fork-join-pool)
-4. [Parallel Collectors](https://github.com/backstreetbrogrammer/35_ParallelStreams#chapter-04-parallel-collectors)
-5. [Good practices using Parallel Streams](https://github.com/backstreetbrogrammer/35_ParallelStreams#chapter-05-good-practices-using-parallel-streams)
+    - [Parallel Collectors](https://github.com/backstreetbrogrammer/35_ParallelStreams#parallel-collectors)
+4. [Good practices using Parallel Streams](https://github.com/backstreetbrogrammer/35_ParallelStreams#chapter-04-good-practices-using-parallel-streams)
 
 ---
 
@@ -1304,13 +1304,133 @@ Thread name: ForkJoinPool-1-worker-5, Count of tasks: 312500
 Thread name: ForkJoinPool-1-worker-3, Count of tasks: 250000
 ```
 
+### Parallel Collectors
+
+Parallel Streams were one of Java 8's highlights, but they turned out to be applicable to **heavy CPU processing**
+exclusively.
+
+The reason for this was the fact that Parallel Streams were internally backed by a **JVM-wide shared** `ForkJoinPool`,
+which provided limited parallelism and was used by all Parallel Streams running on a single JVM instance.
+
+It becomes problematic if we start running multiple parallel blocking operations in parallel. This might quickly
+saturate the pool and result in potentially huge latencies. That's why it's important to build bulkheads by creating
+**separate thread pools** – to prevent unrelated tasks from influencing each other's execution.
+
+There is a third party library which handles Parallel Streams API very well:
+
+[Parallel Collectors](https://github.com/pivovarit/parallel-collectors)
+
 ---
 
-## Chapter 04. Parallel Collectors
+## Chapter 04. Good practices using Parallel Streams
 
----
+A Stream can be created on many sources of data like arrays, collections, text files, etc.
 
-## Chapter 05. Good practices using Parallel Streams
+Splitting the data source **evenly** is a necessary cost to enable parallel execution, but some data sources split
+better than others.
+
+Suppose we have an array of integers of length 1 million.
+
+```
+int[] arr = new int[1_000_000];
+```
+
+It is easy to split an array in 2 sub-arrays of the same size.
+
+![arr](arr.PNG)
+![subarr](subarr.PNG)
+
+The key point here is to choose the source of data for which reaching the center of data must be easy, reliable and
+efficient.
+
+Now, let's look at `LinkedList` example.
+
+![LinkedListSplit](LinkedListSplit.PNG)
+
+It is easy to split a `LinkedList` but costly to reach the element at the **center**.
+
+Benchmarking test to compare `ArrayList` with `LinkedList`:
+
+```java
+import org.openjdk.jmh.annotations.*;
+import org.openjdk.jmh.runner.Runner;
+import org.openjdk.jmh.runner.RunnerException;
+import org.openjdk.jmh.runner.options.Options;
+import org.openjdk.jmh.runner.options.OptionsBuilder;
+
+import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
+
+@Warmup(iterations = 10, time = 1, timeUnit = TimeUnit.SECONDS)
+@Measurement(iterations = 5, time = 1, timeUnit = TimeUnit.SECONDS)
+@Fork(value = 3)
+@BenchmarkMode(Mode.AverageTime)
+@OutputTimeUnit(TimeUnit.MICROSECONDS)
+@State(Scope.Benchmark)
+public class SplittingDataBenchmarking {
+
+    @Param({"1000000"})
+    private int N;
+
+    private final List<Integer> arrayListOfNumbers = new ArrayList<>();
+    private final List<Integer> linkedListOfNumbers = new LinkedList<>();
+
+    @Setup
+    public void setup() {
+        IntStream.rangeClosed(1, N).forEach(i -> {
+            arrayListOfNumbers.add(i);
+            linkedListOfNumbers.add(i);
+        });
+    }
+
+    @Benchmark
+    public double sum_arrayList_sequential() {
+        return arrayListOfNumbers.stream().reduce(0, Integer::sum);
+    }
+
+    @Benchmark
+    public double sum_arrayList_parallel() {
+        return arrayListOfNumbers.parallelStream().reduce(0, Integer::sum);
+    }
+
+    @Benchmark
+    public double sum_linkedList_sequential() {
+        return linkedListOfNumbers.stream().reduce(0, Integer::sum);
+    }
+
+    @Benchmark
+    public double sum_linkedList_parallel() {
+        return linkedListOfNumbers.parallelStream().reduce(0, Integer::sum);
+    }
+
+    public static void main(final String[] args) throws RunnerException {
+        final Options opt = new OptionsBuilder()
+                .include(SplittingDataBenchmarking.class.getName())
+                .build();
+        new Runner(opt).run();
+    }
+}
+```
+
+**Output**
+
+```
+Benchmark                                                                   (N)  Mode  Cnt      Score      Error  Units
+ch04_bestPractices.SplittingDataBenchmarking.sum_arrayList_parallel     1000000  avgt   15   2955.049 ±   40.215  us/op
+ch04_bestPractices.SplittingDataBenchmarking.sum_arrayList_sequential   1000000  avgt   15   8057.878 ± 3829.862  us/op
+ch04_bestPractices.SplittingDataBenchmarking.sum_linkedList_parallel    1000000  avgt   15  16006.547 ± 8762.589  us/op
+ch04_bestPractices.SplittingDataBenchmarking.sum_linkedList_sequential  1000000  avgt   15  10401.785 ± 3952.188  us/op
+```
+
+Results show that converting a sequential stream into a parallel one brings performance benefits only for `ArrayList`.
+
+The reason behind this is that arrays can **split** cheaply and evenly, while `LinkedList` has none of these properties.
+
+A `Set` is implemented by `HashSet`, backed by a `HashMap`. And as we know that `HashMap` is built on an **array**.
+Thus, `HashSet` and `TreeMap` split better than `LinkedList` but not as well as **arrays**.
 
 ---
 
