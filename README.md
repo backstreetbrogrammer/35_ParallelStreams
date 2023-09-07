@@ -28,6 +28,10 @@ Tools used:
         - [Follow up 2: Count the number of tasks each thread executed in the custom Fork-Join Pool](https://github.com/backstreetbrogrammer/35_ParallelStreams#follow-up-2-count-the-number-of-tasks-each-thread-executed-in-the-custom-fork-join-pool)
     - [Parallel Collectors](https://github.com/backstreetbrogrammer/35_ParallelStreams#parallel-collectors)
 4. [Good practices using Parallel Streams](https://github.com/backstreetbrogrammer/35_ParallelStreams#chapter-04-good-practices-using-parallel-streams)
+    - [Splitting the data source](https://github.com/backstreetbrogrammer/35_ParallelStreams#splitting-the-data-source)
+    - [Merging the results](https://github.com/backstreetbrogrammer/35_ParallelStreams#merging-the-results)
+    - [Memory Locality](https://github.com/backstreetbrogrammer/35_ParallelStreams#memory-locality)
+    - [When to use parallel streams](https://github.com/backstreetbrogrammer/35_ParallelStreams#when-to-use-parallel-streams)
 
 ---
 
@@ -1450,6 +1454,163 @@ Thus, `HashSet` and `HashMap` split better than `LinkedList` but not as well as 
 A **stream** can be created on an **iterator** but the number of elements is **unknown**. So parallel stream split will
 be not as performant as `Set`, `Map` or an `array`.
 
+Let's do some JMH benchmarking between `List` and `Set` operations.
+
+```java
+import org.openjdk.jmh.annotations.*;
+import org.openjdk.jmh.runner.Runner;
+import org.openjdk.jmh.runner.RunnerException;
+import org.openjdk.jmh.runner.options.Options;
+import org.openjdk.jmh.runner.options.OptionsBuilder;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
+
+@Warmup(iterations = 10, time = 1, timeUnit = TimeUnit.SECONDS)
+@Measurement(iterations = 5, time = 1, timeUnit = TimeUnit.SECONDS)
+@Fork(value = 3)
+@BenchmarkMode(Mode.AverageTime)
+@OutputTimeUnit(TimeUnit.MICROSECONDS)
+@State(Scope.Benchmark)
+public class SourceSplitBenchmarking {
+
+    @Param("10000000")
+    int N;
+
+    final Random random = new Random(314L);
+
+    Set<String> lineSet;
+    List<String> lineList;
+    Set<Integer> intSet;
+    List<Integer> intList;
+
+    @Setup
+    public void readLines() {
+        try (final Stream<String> lines = Files.lines(Path.of("src", "main", "resources", "words.txt"))) {
+            this.lineSet = lines.collect(Collectors.toSet());
+        } catch (final IOException e) {
+            e.printStackTrace();
+        }
+        this.lineList = new ArrayList<>(this.lineSet);
+    }
+
+    @Setup
+    public void intsList() {
+        intList = IntStream.range(0, N)
+                           .map(i -> random.nextInt())
+                           .boxed()
+                           .collect(Collectors.toList());
+    }
+
+    @Setup
+    public void intsSet() {
+        intSet = IntStream.range(0, N)
+                          .map(i -> random.nextInt())
+                          .boxed()
+                          .collect(Collectors.toSet());
+    }
+
+    @Benchmark
+    public Object process_string_set() {
+        return lineSet.stream()
+                      .map(String::toUpperCase)
+                      .mapToInt(String::length)
+                      .sum();
+    }
+
+    @Benchmark
+    public Object process_string_list() {
+        return lineList.stream()
+                       .map(String::toUpperCase)
+                       .mapToInt(String::length)
+                       .sum();
+    }
+
+    @Benchmark
+    public Object process_string_list_parallel() {
+        return lineList.stream()
+                       .map(String::toUpperCase)
+                       .mapToInt(String::length)
+                       .parallel()
+                       .sum();
+    }
+
+    @Benchmark
+    public Object process_string_set_parallel() {
+        return lineSet.stream()
+                      .map(String::toUpperCase)
+                      .mapToInt(String::length)
+                      .parallel()
+                      .sum();
+    }
+
+    @Benchmark
+    public Object process_int_set() {
+        return intSet.stream()
+                     .mapToInt(i -> i * 3)
+                     .sum();
+    }
+
+    @Benchmark
+    public Object process_int_list() {
+        return intList.stream()
+                      .mapToInt(i -> i * 3)
+                      .sum();
+    }
+
+    @Benchmark
+    public Object process_int_set_parallel() {
+        return intSet.stream()
+                     .mapToInt(i -> i * 3)
+                     .parallel()
+                     .sum();
+    }
+
+    @Benchmark
+    public Object process_int_list_parallel() {
+        return intList.stream()
+                      .mapToInt(i -> i * 3)
+                      .parallel()
+                      .sum();
+    }
+
+    public static void main(final String[] args) throws RunnerException {
+        final Options opt = new OptionsBuilder()
+                .include(SourceSplitBenchmarking.class.getName())
+                .build();
+        new Runner(opt).run();
+    }
+}
+```
+
+**Output**
+
+```
+Benchmark                                                                     (N)  Mode  Cnt       Score       Error  Units
+ch04_bestPractices.SourceSplitBenchmarking.process_int_list              10000000  avgt   15   22326.763 ±   779.031  us/op
+ch04_bestPractices.SourceSplitBenchmarking.process_int_set               10000000  avgt   15  425023.415 ± 20879.082  us/op
+
+ch04_bestPractices.SourceSplitBenchmarking.process_int_list_parallel     10000000  avgt   15   11685.281 ±   546.109  us/op
+ch04_bestPractices.SourceSplitBenchmarking.process_int_set_parallel      10000000  avgt   15  205494.217 ± 16508.364  us/op
+
+ch04_bestPractices.SourceSplitBenchmarking.process_string_list           10000000  avgt   15      68.642 ±     7.889  us/op
+ch04_bestPractices.SourceSplitBenchmarking.process_string_set            10000000  avgt   15      72.205 ±     7.225  us/op
+
+ch04_bestPractices.SourceSplitBenchmarking.process_string_list_parallel  10000000  avgt   15      64.792 ±    44.118  us/op
+ch04_bestPractices.SourceSplitBenchmarking.process_string_set_parallel   10000000  avgt   15     101.882 ±    12.773  us/op
+```
+
+As seen in the benchmark test results, `ArrayList` performs much better than `HashSet`.
+
 ### Merging the results
 
 Every time we split the source for parallel computation, we also need to make sure to combine the results in the end.
@@ -1534,6 +1695,54 @@ operation.
 The merge operation is really cheap for some operations, such as **reduction** and **addition**, but merge operations
 like **grouping** to **sets** or **maps** can be quite expensive.
 
+### Memory Locality
+
+Modern computers use a sophisticated multilevel cache to keep frequently used data close to the processor. When a linear
+memory access pattern is detected, the hardware **prefetches** the next line of data under the assumption that it will
+probably be needed soon.
+
+Parallelism brings performance benefits when we can keep the processor cores busy doing useful work. Since waiting for
+cache **misses** is not useful work, we need to consider the memory bandwidth as a limiting factor.
+
+An array of primitives brings the best locality possible in Java. In general, the more pointers we have in our data
+structure, the more pressure we put on the memory to fetch the reference objects - **pointer chasing**. This can have a
+negative effect on parallelization, as multiple cores simultaneously fetch the data from memory.
+
+**NQ Model**
+
+Oracle presented a simple model that can help us determine whether parallelism can offer us a performance boost. In the
+`NQ` model, `N` stands for the number of source data elements, while `Q` represents the amount of computation performed
+per data element.
+
+The larger the product of `N*Q`, the more likely we are to get a performance boost from parallelization. For problems
+with a trivially small `Q`, such as **summing** up numbers, the rule of thumb is that `N` should be greater
+than `10,000`. As the number of computations increases, the data size required to get a performance boost from
+parallelism decreases.
+
+### When to use parallel streams
+
+As we've seen, we need to be very considerate when using parallel streams.
+
+Parallelism can bring performance benefits in certain use cases. But parallel streams cannot be considered as a magical
+performance booster. So, **sequential** streams should still be used as **default** during development.
+
+A **sequential** stream can be converted to a **parallel** one when we have actual performance requirements. Given those
+requirements, we should first run a performance measurement and consider parallelism as a possible optimization
+strategy.
+
+A large amount of data and many computations done per element indicate that parallelism could be a good option.
+
+On the other hand, a small amount of data, unevenly splitting sources, expensive merge operations and poor memory
+locality indicate a potential problem for parallel execution.
+
+- **Arrays** / **ArrayList**  are a great data source for parallel execution because they bring the best possible
+  locality (cache-friendly) and can split cheaply and evenly.
+- **File Search** using parallel streams performs better in comparison to sequential streams. For example, searching
+  over 1500 text files.
+- Do NOT go parallel on the wrong source - sources of UNKNOWN size, splitting evenly is difficult, etc. Make sure our
+  source is SIZED and SUB-SIZED
+- Prefer `Lists` over `Sets`
+- Avoid faulty **reductions** - it should be **associative** and **stateless**
 
 ---
 
