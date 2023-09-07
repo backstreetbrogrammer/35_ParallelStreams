@@ -1737,12 +1737,14 @@ locality indicate a potential problem for parallel execution.
 
 - **Arrays** / **ArrayList**  are a great data source for parallel execution because they bring the best possible
   locality (cache-friendly) and can split cheaply and evenly.
-- **File Search** using parallel streams performs better in comparison to sequential streams. For example, searching
-  over 1500 text files.
 - Do NOT go parallel on the wrong source - sources of UNKNOWN size, splitting evenly is difficult, etc. Make sure our
   source is SIZED and SUB-SIZED
 - Prefer `Lists` over `Sets`
+- Avoid **hidden synchronizations** - `findFirst()`, `limit()`, `skip()` etc.
 - Avoid faulty **reductions** - it should be **associative** and **stateless**
+- Avoid using **grouping** or **collect** methods
+- **File Search** using parallel streams performs better in comparison to sequential streams. For example, searching
+  over 1500 text files.
 
 ---
 
