@@ -1,6 +1,6 @@
 # Parallel Streams in Java
 
-> This is a tutorials course covering parallel streams in Java.
+> This is a tutorial course covering parallel streams in Java.
 
 Tools used:
 
@@ -62,9 +62,9 @@ Sequential streams use a **single thread** to process the pipeline.
                        .orElseThrow(); // Java 11
 ```
 
-It's also very easy to create streams that execute in **parallel** and make use of multiple processor cores.
+It's also straightforward to create streams that execute in **parallel** and make use of multiple processor cores.
 
-Converting it into **parallel** stream is very simple.
+Converting it into **parallel** stream is elementary.
 
 **Java 8** introduced the `parallelStream()` method to the `Collection` interface and the `parallel()` method to the
 `BaseStream` interface.
@@ -100,10 +100,10 @@ We can convert the stream to a parallel stream in two ways:
 When a stream executes in **parallel**, the Java runtime splits the stream into multiple sub-streams.
 
 There is a **special** bit which is `set` => any `Stream` **terminal** operation triggers all the **intermediate**
-operations. JVM checks for this special bit and if it is set, then it executes all the operations in parallel.
+operations. JVM checks for this special bit, and if it is set, then it executes all the operations in parallel.
 
 Parallel streams enable us to execute code in parallel on separate cores. The final result is the combination of each
-individual outcome.
+outcome.
 
 However, the _**order**_ of execution is out of our control. It may change every time we run the program.
 
@@ -176,8 +176,10 @@ Stream operation.
 The default implementation of the `parallelStream()` method creates a parallel `Stream` from
 the `Collection's` `Spliterator<T>` interface.
 
-The `Spliterator` is an object for traversing and partitioning elements of its source. A `Spliterator` can partition off
-some elements of its source using its `trySplit()` method to make it eligible for possible parallel operations.
+The `Spliterator` is an object for traversing and partitioning elements of its source.
+
+A `Spliterator` can partition off some elements of its source using its `trySplit()` method to make it eligible for
+possible parallel operations.
 
 The `Spliterator` API, similar to an `Iterator`, allows for the traversal of elements of its source and was designed to
 support efficient **parallel** traversal.
@@ -186,9 +188,11 @@ The `Collection's` default `Spliterator` will be used in `parallelStream()` invo
 
 **Using BaseStream.parallel()**
 
-We can achieve the same result by first converting the collection to a `Stream`. We can convert the **sequential**
-stream generated as a result into a **parallel** stream by calling `parallel()` on it. Once we have a parallel stream,
-we can find our result in the same way we have done above.
+We can achieve the same result by first converting the collection to a `Stream`.
+
+We can convert the **sequential** stream generated as a result into a **parallel** stream by calling `parallel()` on it.
+
+Once we have a parallel stream, we can find our result in the same way we have done above.
 
 ```
     final long usingStreamParallel(final Collection<Order> orders, final int qty) {
@@ -212,8 +216,11 @@ The result of both approaches bears the same result.
 ### Difference in `parallelStream()` and `stream().parallel()`
 
 `Collections.parallelStream()` uses the source collection's default `Spliterator` to split the data source to enable
-parallel execution. Splitting the data source **_evenly_** is important for enabling correct parallel execution. An
-unevenly split data source does more harm in parallel execution than its sequential counterpart.
+parallel execution.
+
+Splitting the data source **_evenly_** is important for enabling correct parallel execution.
+
+An unevenly split data source does more harm in parallel execution than its sequential counterpart.
 
 A developer can always override `Spliterator` interface and implement its `trySplit()` method incorrectly => not
 splitting the data source **_evenly_**.
@@ -226,7 +233,7 @@ version of the stream provided to it.
 To check whether converting a sequential stream to parallel stream will improve performance or not, it is always
 advisable to **measure** the performance.
 
-JMH can be used to do **micro-benchmarking** => it means, we can measure performance of individual **methods** in a
+JMH can be used to do **micro-benchmarking** => it means we can measure the performance of individual **methods** in a
 class.
 
 We should include maven dependencies: `jmh-core`, `jmh-generator-annprocess` and include the plugin:
@@ -437,7 +444,7 @@ As evident from the output, parallel streams performance is much better than seq
 
 ## Chapter 02. Performance Gains using Parallel Streams
 
-While using parallel streams, there are 2 features which can affect performance:
+While using parallel streams, there are two features that can affect performance:
 
 - Autoboxing
 - Pointer chasing
@@ -553,7 +560,7 @@ Performance is very poor for wrapper `Integer` sum as compared to primitive `int
 
 ### Pointer chasing
 
-As we have seen multicore CPU architecture before where we have different level of caches present: L1, L2 and L3.
+As we have seen multicore CPU architecture before where we have different levels of caches present: `L1, L2 and L3`.
 
 ![CPUCaches](CPUCaches.PNG)
 
@@ -738,7 +745,7 @@ ArrayList > LinkedList > LinkedList (shuffled) > LinkedList (scattered)
 Parallel streams are built on the Fork-Join Pool framework:
 
 - a task is split in 2 sub-tasks
-- sub-tasks are sent to a common pool of thread: **Fork-Join Pool**
+- subtasks are sent to a common pool of thread: **Fork-Join Pool**
 - the results of each sub-tasks are joined
 - and the global result is computed
 
@@ -781,7 +788,7 @@ However, the API allows us to specify the number of threads it will use by passi
 ```
 
 It's important to remember that this is a global setting and that it will affect all parallel streams and any other
-fork-join tasks that use the common pool. Thus, this parameter should not be modified unless we have a very good reason
+fork-join tasks that use the common pool. Thus, this parameter should not be modified unless we have an excellent reason
 for doing so.
 
 ### Interview Problem 2 (JP Morgan Chase): Identify the issue in the given code snippet
@@ -827,7 +834,7 @@ Actual   :30
 	...
 ```
 
-Sum of first 5 integers 1...5 is `15`.
+Sum of first `5` integers `1...5` is `15`.
 
 However, the above test always **fails**!
 
@@ -867,7 +874,7 @@ Number `5` should be added outside the parallel stream:
     }
 ```
 
-Therefore, we need to be very careful about which operations can be run in parallel.
+Therefore, we need to be cautious about which operations can be run in parallel.
 
 Besides, the default **common** thread pool, it's also possible to run a parallel stream in a **custom** thread pool.
 
@@ -886,8 +893,9 @@ Besides, the default **common** thread pool, it's also possible to run a paralle
     }
 ```
 
-However, please note that using the **common** thread pool is recommended by **Oracle**. We should have a very good
-reason for running parallel streams in **custom** thread pools.
+However, please note that using the **common** thread pool is recommended by **Oracle**.
+
+We should have a perfect reason for running parallel streams in **custom** thread pools.
 
 ### Performance implications
 
@@ -990,7 +998,7 @@ stream.filter(number -> number % 11 == 0)
       .findFirst(); // find the FIRST element
 ```
 
-How can Fork-Join API track the first element ? By using synchronization across multiple threads in the pool.
+How can Fork-Join API track the first element? By using synchronization across multiple threads in the pool.
 
 However, using `findAny()` will be much easier and have less or no hidden synchronization involved.
 
@@ -1150,7 +1158,7 @@ However, the sum of squares code snippet is **not** associative:
 stream.reduce(0, (a, b) -> a*a + b*b));
 ```
 
-If we have list of 8 integers = `[1, 1, 1, 1, 1, 1, 1, 1]`
+If we have a list of `8` integers = `[1, 1, 1, 1, 1, 1, 1, 1]`
 
 Expected correct result is = `1*1 + 1*1 + 1*1 + 1*1 + 1*1 + 1*1 + 1*1 + 1*1 => 8`
 
@@ -1163,7 +1171,7 @@ After that, it gets the fourth 1 = 5*5 + 1*1 => 26
 ...
 ```
 
-In another scenario, if all the 8 integers are split uniformly in Fork-Join pool, results will still be wrong.
+In another scenario, if all the `8` integers are split uniformly in Fork-Join pool, results will still be wrong.
 
 ```
 [1, 1, 1, 1, 1, 1, 1, 1] => split into 2 subtasks [1, 1, 1, 1] and  [1, 1, 1, 1]
@@ -1210,7 +1218,7 @@ parallel sum of squares = 1972450717
 
 ### Interview Problem 3 (Barclays): Display the threads executing in parallel streams
 
-Write a demo code to display the threads names executing in parallel streams.
+Write a demo code to display the threads' names executed in parallel streams.
 
 **Solution**
 
@@ -1243,7 +1251,7 @@ ForkJoinPool.commonPool-worker-3
 
 #### Follow up 1: Execute a parallel stream in a custom Fork-Join Pool
 
-We can create a new `ForkJoinPool` object with the given number of parallelism and submit the tasks to it.
+We can create a new `ForkJoinPool` object with the given amount of parallelism and submit the tasks to it.
 
 ```
     @Test
@@ -1320,7 +1328,7 @@ It becomes problematic if we start running multiple parallel blocking operations
 saturate the pool and result in potentially huge latencies. That's why it's important to build bulkheads by creating
 **separate thread pools** – to prevent unrelated tasks from influencing each other's execution.
 
-There is a third party library which handles Parallel Streams API very well:
+There is a third party library that handles Parallel Streams API very well:
 
 [Parallel Collectors](https://github.com/pivovarit/parallel-collectors)
 
@@ -1335,13 +1343,13 @@ A Stream can be created on many sources of data like arrays, collections, text f
 Splitting the data source **evenly** is a necessary cost to enable parallel execution, but some data sources split
 better than others.
 
-Suppose we have an array of integers of length 1 million.
+Suppose we have an array of integers of length `1 million`.
 
 ```
 int[] arr = new int[1_000_000];
 ```
 
-It is easy to split an array in 2 sub-arrays of the same size.
+It is easy to split an array in `2` sub-arrays of the same size.
 
 ![arr](arr.PNG)
 ![subarr](subarr.PNG)
@@ -1442,7 +1450,7 @@ A `Set` is implemented by `HashSet`, backed by a `HashMap`. And as we know that 
 Size of the backed array is always a power of 2: 16, 32, 64, etc.
 
 The entry object is stored in this array based on the hashcode of the key and randomly split across the array. For the
-hash collisions, the same bucket can have linked list of entry objects.
+hash collisions, the same bucket can have linked-list of entry objects.
 
 Therefore, although splitting a set is easy and reaching the center is inexpensive, still it's impossible to know if
 both the halves contain equal number of entry objects.
@@ -1692,8 +1700,8 @@ ch04_bestPractices.MergingResultsBenchmarking.sum_arrayList_sequential      1000
 Results show that converting a sequential stream into a parallel one brings performance benefits only for the **sum**
 operation.
 
-The merge operation is really cheap for some operations, such as **reduction** and **addition**, but merge operations
-like **grouping** to **sets** or **maps** can be quite expensive.
+The merge operation is really economical for some operations, such as **reduction** and **addition**, but merge
+operations like **grouping** to **sets** or **maps** can be quite expensive.
 
 ### Memory Locality
 
